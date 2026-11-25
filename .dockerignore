@@ -1,0 +1,10 @@
+.env
+.venv
+.git
+daten
+alt
+deploy
+webapp/node_modules
+webapp/dist
+**/__pycache__
+*.dump

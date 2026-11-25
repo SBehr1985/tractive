@@ -1,0 +1,11 @@
+{
+  "name": "Gassi-Runden",
+  "short_name": "Gassi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f3ef",
+  "theme_color": "#e0682b",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

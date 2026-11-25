@@ -1,0 +1,10 @@
+.env
+.venv/
+daten/
+alt/daten/
+alt/gassi_bericht.html
+__pycache__/
+*.dump
+webapp/node_modules/
+webapp/dist/
+.claude/

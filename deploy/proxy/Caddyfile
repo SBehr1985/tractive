@@ -1,0 +1,11 @@
+# Eine Zeile je App. Nach einer Änderung: docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+
+crnews.sbgis.de {
+	encode gzip
+	reverse_proxy crnews-app:8000
+}
+
+tractive.sbgis.de {
+	encode gzip
+	reverse_proxy gassi-app:8000
+}

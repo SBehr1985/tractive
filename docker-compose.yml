@@ -1,0 +1,44 @@
+# Gassi-App auf dem Server: App + eigene PostgreSQL. HTTPS macht der zentrale Caddy (deploy/proxy),
+# der die App über das gemeinsame Docker-Netz "web" unter dem Namen "gassi-app" erreicht.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: gassi
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: gassi
+    # sparsam, der Server hat nur 1 GB RAM
+    command: ["postgres", "-c", "shared_buffers=32MB", "-c", "max_connections=20"]
+    volumes:
+      - gassi-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gassi -d gassi"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://gassi:${POSTGRES_PASSWORD}@db:5432/gassi
+      COOKIE_SECURE: "true"
+      SCHEDULER_ENABLED: "true"
+    depends_on:
+      db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    networks:
+      default:
+      web:
+        aliases: [gassi-app]
+
+volumes:
+  gassi-pg:
+
+networks:
+  web:
+    external: true

@@ -1,0 +1,24 @@
+# Zentraler Reverse-Proxy für alle Apps auf dem Server (liegt auf dem Server unter /opt/proxy).
+# Caddy holt die HTTPS-Zertifikate automatisch und leitet je Subdomain an die passende App weiter.
+# Die Apps hängen im gemeinsamen Docker-Netz "web" (einmalig: docker network create web).
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - web
+
+volumes:
+  caddy-data:
+  caddy-config:
+
+networks:
+  web:
+    external: true

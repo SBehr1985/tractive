@@ -1,0 +1,9 @@
+{
+  "hundename": "Barry Goda",
+  "zuhause": { "lat": null, "lon": null, "radius_m": 80 },
+  "tage_laden": 30,
+  "pause_min": 15,
+  "pause_radius_m": 60,
+  "min_dauer_min": 5,
+  "min_strecke_m": 300
+}

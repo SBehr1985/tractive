@@ -1,0 +1,607 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gassi-Runden</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f3ef; --card: #ffffff; --text: #22201c; --muted: #77716a; --line: #e6e1d9;
+    --accent: #e0682b; --accent-soft: #fbe6da; --ok: #2f8f5b; --warn: #b7791f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1917; --card: #24221f; --text: #eeeae4; --muted: #a29b92; --line: #38352f;
+      --accent: #f08a50; --accent-soft: #3d2a1f; --ok: #5cc28a; --warn: #e0a84a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { padding: 18px 16px 8px; max-width: 1200px; margin: 0 auto; }
+  h1 { margin: 0; font-size: 22px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  nav { display: flex; gap: 6px; padding: 8px 16px; max-width: 1200px; margin: 0 auto; }
+  nav button { border: 1px solid var(--line); background: var(--card); color: var(--text);
+               padding: 8px 16px; border-radius: 999px; font: inherit; cursor: pointer; }
+  nav button.aktiv { background: var(--accent); border-color: var(--accent); color: #fff; }
+  main { max-width: 1200px; margin: 0 auto; padding: 8px 16px 32px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; }
+
+  /* Runden */
+  #ansicht-runden { display: grid; grid-template-columns: 360px 1fr; gap: 16px; align-items: start; }
+  #liste { max-height: calc(100vh - 150px); overflow-y: auto; padding: 4px 0; }
+  .tag { padding: 12px 16px 4px; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+  .runde { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 16px;
+           border-left: 3px solid transparent; cursor: pointer; }
+  .runde:hover { background: var(--accent-soft); }
+  .runde.aktiv { background: var(--accent-soft); border-left-color: var(--accent); }
+  .runde .zeit { font-weight: 600; }
+  .runde .werte { text-align: right; font-variant-numeric: tabular-nums; }
+  .runde .klein { color: var(--muted); font-size: 12.5px; }
+  .badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 999px;
+           background: var(--line); color: var(--muted); margin-left: 4px; }
+  #detail { padding: 16px; }
+  #detail h2 { margin: 0 0 2px; font-size: 18px; }
+  #karte-wrap { position: relative; margin: 12px 0; }
+  #karte { height: 420px; border-radius: 10px; overflow: hidden; }
+  .stilwahl { position: absolute; top: 10px; right: 10px; display: flex; box-shadow: 0 1px 4px rgba(0,0,0,.25); border-radius: 999px; }
+  .stilwahl button { border: 0; background: #fff; color: #222; padding: 5px 11px; font: inherit; font-size: 12.5px; cursor: pointer; }
+  .stilwahl button:first-child { border-radius: 999px 0 0 999px; }
+  .stilwahl button:last-child { border-radius: 0 999px 999px 0; }
+  .stilwahl button.aktiv { background: var(--accent); color: #fff; }
+  .pin { width: 16px; height: 16px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+  .karten-hinweis { color: var(--muted); font-size: 12.5px; margin-top: -4px; margin-bottom: 8px; }
+  .kacheln { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .kachel { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+  .kachel .w { font-size: 22px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .kachel .l { color: var(--muted); font-size: 12.5px; }
+  #zurueck { display: none; border: 0; background: none; color: var(--accent); font: inherit;
+             padding: 0 0 8px; cursor: pointer; }
+  .leer { padding: 40px 16px; text-align: center; color: var(--muted); }
+
+  /* Statistik */
+  #ansicht-statistik { display: none; }
+  .stat-kopf { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .stat-kopf .card { padding: 14px 16px; }
+  .stat-kopf .w { font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .stat-kopf .l { color: var(--muted); font-size: 13px; }
+  .diagramm { padding: 16px; margin-bottom: 16px; }
+  .diagramm-kopf { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; gap: 8px; flex-wrap: wrap; }
+  .diagramm h3 { margin: 0; font-size: 16px; }
+  .umschalter button { border: 1px solid var(--line); background: var(--card); color: var(--text);
+                       padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .umschalter button:first-child { border-radius: 999px 0 0 999px; }
+  .umschalter button:last-child { border-radius: 0 999px 999px 0; margin-left: -1px; }
+  .umschalter button.aktiv { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chart-box { position: relative; height: 260px; }
+
+  /* Position */
+  #position { margin-top: 10px; padding: 10px 14px; display: flex; gap: 10px; align-items: center;
+              justify-content: space-between; flex-wrap: wrap; font-size: 14px; }
+  #position button { border: 1px solid var(--accent); color: var(--accent); background: none; border-radius: 999px;
+                     padding: 4px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+
+  /* Aktivität */
+  :root { --z-aktiv: #e0682b; --z-ruhe: #d9d3ca; --z-schlaf: #5b6b9a; }
+  @media (prefers-color-scheme: dark) { :root { --z-aktiv: #f08a50; --z-ruhe: #4a463f; --z-schlaf: #7f8fc4; } }
+  #ansicht-aktivitaet { display: none; }
+  .legende { display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); }
+  .legende i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .atag { padding: 10px 0; border-top: 1px solid var(--line); }
+  .atag:first-child { border-top: 0; }
+  .atag-kopf { display: flex; justify-content: space-between; font-size: 13.5px; margin-bottom: 6px; gap: 8px; flex-wrap: wrap; }
+  .atag-kopf .klein { color: var(--muted); font-size: 12.5px; }
+  .streifen { position: relative; height: 22px; border-radius: 4px; overflow: hidden; background: var(--bg); }
+  .streifen div { position: absolute; top: 0; bottom: 0; }
+  .gassi { position: relative; height: 6px; margin-top: 3px; }
+  .gassi div { position: absolute; top: 0; bottom: 0; background: var(--ok); border-radius: 3px; }
+  .achse { position: relative; height: 14px; font-size: 10.5px; color: var(--muted); }
+  .achse span { position: absolute; transform: translateX(-50%); }
+  .achse span:first-child { transform: none; }
+  .achse span:last-child { transform: translateX(-100%); }
+
+  @media (max-width: 800px) {
+    #ansicht-runden { grid-template-columns: 1fr; }
+    #liste { max-height: none; }
+    #detail-box { display: none; }
+    body.detail-offen #liste-box { display: none; }
+    body.detail-offen #detail-box { display: block; }
+    #zurueck { display: inline-block; }
+    #karte { height: 320px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="titel">Gassi-Runden</h1>
+  <div class="sub" id="stand"></div>
+  <div class="card" id="position" style="display:none"></div>
+</header>
+<nav>
+  <button class="aktiv" data-ansicht="runden">Runden</button>
+  <button data-ansicht="statistik">Statistik</button>
+  <button data-ansicht="aktivitaet">Aktivität</button>
+</nav>
+<main>
+  <section id="ansicht-runden">
+    <div class="card" id="liste-box"><div id="liste"></div></div>
+    <div class="card" id="detail-box"><div id="detail">
+      <button id="zurueck">‹ Alle Runden</button>
+      <div id="detail-kopf"></div>
+      <div id="karte-wrap"><div id="karte"></div><div class="stilwahl" id="stilwahl"></div></div>
+      <div class="karten-hinweis" id="karten-hinweis"></div>
+      <div class="kacheln" id="detail-kacheln"></div>
+    </div></div>
+  </section>
+
+  <section id="ansicht-statistik">
+    <div class="stat-kopf" id="stat-kopf"></div>
+    <div class="card diagramm">
+      <div class="diagramm-kopf">
+        <h3>Pro Tag (letzte 14 Tage)</h3>
+        <div class="umschalter" data-chart="tag"><button class="aktiv" data-m="zeit">Zeit</button><button data-m="km">km</button></div>
+      </div>
+      <div class="chart-box"><canvas id="chart-tag"></canvas></div>
+    </div>
+    <div class="card diagramm">
+      <div class="diagramm-kopf">
+        <h3>Pro Woche (letzte 8 Wochen)</h3>
+        <div class="umschalter" data-chart="woche"><button class="aktiv" data-m="zeit">Zeit</button><button data-m="km">km</button></div>
+      </div>
+      <div class="chart-box"><canvas id="chart-woche"></canvas></div>
+    </div>
+  </section>
+
+  <section id="ansicht-aktivitaet">
+    <div class="stat-kopf" id="aktiv-kopf"></div>
+    <div class="card diagramm">
+      <div class="diagramm-kopf"><h3>Aktive Minuten pro Tag (letzte 14 Tage)</h3></div>
+      <div class="chart-box"><canvas id="chart-aktiv"></canvas></div>
+    </div>
+    <div class="card diagramm">
+      <div class="diagramm-kopf">
+        <h3>Tagesverlauf</h3>
+        <div class="legende">
+          <span><i style="background:var(--z-aktiv)"></i>Aktiv</span>
+          <span><i style="background:var(--z-ruhe)"></i>Ruhe</span>
+          <span><i style="background:var(--z-schlaf)"></i>Schlaf</span>
+          <span><i style="background:var(--ok)"></i>Gassirunde (GPS)</span>
+        </div>
+      </div>
+      <div id="aktiv-tage"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const DATEN = /*__DATEN__*/null;
+
+// ---------- Formatierung ----------
+const WT = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+const zweistellig = n => String(n).padStart(2, "0");
+const uhrzeit = ts => { const d = new Date(ts * 1000); return zweistellig(d.getHours()) + ":" + zweistellig(d.getMinutes()); };
+const tagSchluessel = d => d.getFullYear() + "-" + zweistellig(d.getMonth() + 1) + "-" + zweistellig(d.getDate());
+const datumLang = d => d.toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
+const km = m => (m / 1000).toLocaleString("de-DE", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+function dauer(s) {
+  const min = Math.round(s / 60);
+  if (min < 60) return min + " min";
+  return Math.floor(min / 60) + " h " + zweistellig(min % 60) + " min";
+}
+function entfernung(m) { return m < 1000 ? Math.round(m) + " m" : km(m) + " km"; }
+function wochenStart(d) { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; }
+function kw(d) {
+  const x = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const tag = x.getUTCDay() || 7; x.setUTCDate(x.getUTCDate() + 4 - tag);
+  const j = new Date(Date.UTC(x.getUTCFullYear(), 0, 1));
+  return Math.ceil(((x - j) / 86400000 + 1) / 7);
+}
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+// ---------- Kopf ----------
+const runden = (DATEN ? DATEN.runden : []).slice().sort((a, b) => b.start - a.start);
+const AKTIV = (DATEN && DATEN.aktivitaet) || {};   // Tag -> {minuten_aktiv, stand, segmente}
+runden.forEach((r, i) => r.id = i);
+document.getElementById("titel").textContent = (DATEN && DATEN.hund ? DATEN.hund + " – " : "") + "Gassi-Runden";
+if (DATEN) document.getElementById("stand").textContent =
+  "Stand: " + new Date(DATEN.erstellt * 1000).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" }) +
+  " · " + runden.length + " Runden";
+
+// ---------- Ansicht wechseln ----------
+function zeigeAnsicht(name) {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("aktiv", x.dataset.ansicht === name));
+  document.getElementById("ansicht-runden").style.display = name === "runden" ? "" : "none";
+  document.getElementById("ansicht-statistik").style.display = name === "statistik" ? "block" : "none";
+  document.getElementById("ansicht-aktivitaet").style.display = name === "aktivitaet" ? "block" : "none";
+  if (name === "statistik") zeichneStatistik();
+  if (name === "aktivitaet") zeichneAktivitaet();
+  if (name === "runden" && karte) setTimeout(() => karte.resize(), 0);
+}
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => zeigeAnsicht(b.dataset.ansicht));
+
+// ---------- Letzte Position ----------
+const POS = DATEN && DATEN.position;
+let posPin = null;
+if (POS) {
+  const weg = DATEN.zuhause ? (() => {
+    const r = 6371000, p1 = DATEN.zuhause.lat * Math.PI / 180, p2 = POS.lat * Math.PI / 180;
+    const dp = p2 - p1, dl = (POS.lon - DATEN.zuhause.lon) * Math.PI / 180;
+    const a = Math.sin(dp / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2;
+    return 2 * r * Math.asin(Math.sqrt(a));
+  })() : null;
+  const wo = weg == null ? "" : weg <= DATEN.zuhause.radius_m ? "zu Hause" : entfernung(weg) + " von zu Hause";
+  const box = document.getElementById("position");
+  box.innerHTML = `<span>📍 Letzte Position: <b>${uhrzeit(POS.zeit)} Uhr</b>${wo ? " · " + wo : ""}` +
+    `${POS.akku != null ? " · Akku " + POS.akku + " %" : ""}</span> <button id="pos-zeigen">Auf Karte zeigen</button>`;
+  box.style.display = "";
+  document.getElementById("pos-zeigen").onclick = () => {
+    zeigeAnsicht("runden");
+    document.body.classList.add("detail-offen");
+    if (!karte) karteStarten();
+    karte.resize();
+    if (!posPin) posPin = pin("#2f7fbf");
+    posPin.setLngLat([POS.lon, POS.lat])
+      .setPopup(new maplibregl.Popup({ offset: 12 }).setText("Letzte Position " + uhrzeit(POS.zeit) + " Uhr")).addTo(karte);
+    karte.flyTo({ center: [POS.lon, POS.lat], zoom: 16 });
+    posPin.togglePopup();
+  };
+}
+
+// ---------- Liste ----------
+function zeichneListe() {
+  const box = document.getElementById("liste");
+  if (!runden.length) { box.innerHTML = '<div class="leer">Noch keine Runden erkannt.</div>'; return; }
+  const gruppen = new Map();
+  for (const r of runden) {
+    const k = tagSchluessel(new Date(r.start * 1000));
+    if (!gruppen.has(k)) gruppen.set(k, []);
+    gruppen.get(k).push(r);
+  }
+  const heute = tagSchluessel(new Date());
+  const gestern = tagSchluessel(new Date(Date.now() - 86400000));
+  let html = "";
+  for (const [k, liste] of gruppen) {
+    const d = new Date(liste[0].start * 1000);
+    const name = k === heute ? "Heute" : k === gestern ? "Gestern" : datumLang(d);
+    const summeS = liste.reduce((s, r) => s + r.dauer_s, 0);
+    const summeM = liste.reduce((s, r) => s + r.strecke_m, 0);
+    html += `<div class="tag"><span>${name}</span><span>${dauer(summeS)} · ${km(summeM)} km</span></div>`;
+    for (const r of liste) {   // neueste Runde oben -> durchgehende Zeitleiste
+      const badge = !r.ende_zuhause ? '<span class="badge">endet unterwegs</span>'
+                  : !r.start_zuhause ? '<span class="badge">startet unterwegs</span>' : "";
+      html += `<div class="runde" data-id="${r.id}">
+        <div class="zeit">${uhrzeit(r.start)} – ${uhrzeit(r.ende)}${badge}</div>
+        <div class="werte">${dauer(r.dauer_s)}</div>
+        <div class="klein">Ø ${(r.strecke_m / 1000 / (r.dauer_s / 3600)).toLocaleString("de-DE", { maximumFractionDigits: 1 })} km/h</div>
+        <div class="werte klein">${km(r.strecke_m)} km</div>
+      </div>`;
+    }
+  }
+  box.innerHTML = html;
+  box.querySelectorAll(".runde").forEach(el => el.onclick = () => zeigeRunde(+el.dataset.id, true));
+}
+
+// ---------- Karte (MapLibre + MapTiler) ----------
+const KARTE = (DATEN && DATEN.karte) || {};
+const STILE = [];
+if (KARTE.key) {
+  for (const [name, id] of [["Karte", KARTE.stil || "streets-v2"], ["Outdoor", "outdoor-v2"], ["Satellit", "hybrid"]])
+    if (!STILE.some(s => s[1] === id)) STILE.push([name, id]);
+}
+const stilUrl = id => `https://api.maptiler.com/maps/${id}/style.json?key=${encodeURIComponent(KARTE.key)}`;
+const OSM_STIL = {
+  version: 8,
+  sources: { osm: { type: "raster", tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"], tileSize: 256,
+                    maxzoom: 19, attribution: "© OpenStreetMap-Mitwirkende" } },
+  layers: [{ id: "osm", type: "raster", source: "osm" }]
+};
+let karte = null, stilBereit = false, aktuelleRunde = null, pinStart = null, pinEnde = null;
+
+function pin(farbe) {
+  const el = document.createElement("div");
+  el.className = "pin"; el.style.background = farbe;
+  return new maplibregl.Marker({ element: el });
+}
+
+function kreis(lat, lon, radius) {
+  const coords = [];
+  for (let i = 0; i <= 64; i++) {
+    const w = 2 * Math.PI * i / 64;
+    coords.push([lon + Math.sin(w) * radius / (111320 * Math.cos(lat * Math.PI / 180)), lat + Math.cos(w) * radius / 110540]);
+  }
+  return { type: "Feature", geometry: { type: "Polygon", coordinates: [coords] } };
+}
+
+function karteStarten() {
+  karte = new maplibregl.Map({
+    container: "karte",
+    style: STILE.length ? stilUrl(STILE[0][1]) : OSM_STIL,
+    attributionControl: { compact: true },
+    cooperativeGestures: false
+  });
+  karte.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-left");
+  karte.on("style.load", () => { stilBereit = true; ebenenSetzen(); });
+  pinStart = pin(css("--ok"));
+  pinEnde = pin("#c0392b");
+
+  const wahl = document.getElementById("stilwahl");
+  if (STILE.length > 1) {
+    wahl.innerHTML = STILE.map(([name, id], i) => `<button data-id="${id}" class="${i ? "" : "aktiv"}">${name}</button>`).join("");
+    wahl.querySelectorAll("button").forEach(b => b.onclick = () => {
+      wahl.querySelectorAll("button").forEach(x => x.classList.toggle("aktiv", x === b));
+      // MapLibre gleicht beim Stilwechsel nur die Unterschiede ab und würde dabei
+      // unsere eigenen Ebenen entfernen. Darum hängen wir sie an den neuen Stil an –
+      // ganz am Ende, damit sie über allen Kartenebenen liegen.
+      karte.setStyle(stilUrl(b.dataset.id), {
+        transformStyle: (alt, neu) => ({
+          ...neu,
+          sources: { ...neu.sources, ...eigeneQuellen() },
+          layers: [...neu.layers.filter(l => !EIGENE_EBENEN.includes(l.id)), ...eigeneEbenen()]
+        })
+      });
+      karte.once("idle", ebenenSetzen);
+    });
+  } else wahl.style.display = "none";
+  if (!KARTE.key) document.getElementById("karten-hinweis").textContent =
+    "Ohne MapTiler-Schlüssel wird OpenStreetMap angezeigt – Schlüssel in der Datei .env eintragen.";
+}
+
+// eigene Kartenebenen (Reihenfolge = Zeichenreihenfolge, letzte liegt oben)
+const EIGENE_EBENEN = ["zuhause-flaeche", "zuhause-rand", "strecke-rand", "strecke"];
+
+function eigeneQuellen() {
+  const q = {};
+  if (aktuelleRunde) q.strecke = { type: "geojson", data: {
+    type: "Feature", geometry: { type: "LineString", coordinates: aktuelleRunde.punkte.map(p => [p[1], p[0]]) } } };
+  if (DATEN.zuhause) q.zuhause = { type: "geojson",
+    data: kreis(DATEN.zuhause.lat, DATEN.zuhause.lon, DATEN.zuhause.radius_m) };
+  return q;
+}
+
+function eigeneEbenen() {
+  const e = [];
+  if (DATEN.zuhause) e.push(
+    { id: "zuhause-flaeche", type: "fill", source: "zuhause", paint: { "fill-color": "#555", "fill-opacity": 0.1 } },
+    { id: "zuhause-rand", type: "line", source: "zuhause", paint: { "line-color": "#555", "line-width": 1, "line-dasharray": [2, 2] } });
+  if (aktuelleRunde) e.push(
+    { id: "strecke-rand", type: "line", source: "strecke", layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": "#ffffff", "line-width": 7, "line-opacity": 0.9 } },
+    { id: "strecke", type: "line", source: "strecke", layout: { "line-join": "round", "line-cap": "round" },
+      paint: { "line-color": css("--accent"), "line-width": 4 } });
+  return e;
+}
+
+function ebenenSetzen() {
+  if (!stilBereit || !aktuelleRunde) return;
+  for (const [id, spec] of Object.entries(eigeneQuellen())) {
+    const q = karte.getSource(id);
+    if (q) q.setData(spec.data); else karte.addSource(id, spec);
+  }
+  for (const ebene of eigeneEbenen()) {
+    if (!karte.getLayer(ebene.id)) karte.addLayer(ebene);   // ohne beforeId = ganz oben
+    else karte.moveLayer(ebene.id);                         // sicherstellen, dass sie oben bleibt
+  }
+}
+
+function karteZeigen(r) {
+  aktuelleRunde = r;
+  if (!karte) karteStarten();
+  karte.resize();
+  const coords = r.punkte.map(p => [p[1], p[0]]);
+  pinStart.setLngLat(coords[0]).setPopup(new maplibregl.Popup({ offset: 12 }).setText("Start " + uhrzeit(r.start))).addTo(karte);
+  pinEnde.setLngLat(coords[coords.length - 1]).setPopup(new maplibregl.Popup({ offset: 12 }).setText("Ende " + uhrzeit(r.ende))).addTo(karte);
+  const b = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
+  karte.fitBounds(b, { padding: 40, duration: 0, maxZoom: 17 });
+  ebenenSetzen();
+}
+
+// ---------- Detail ----------
+document.getElementById("zurueck").onclick = () => document.body.classList.remove("detail-offen");
+function zeigeRunde(id, vonKlick) {
+  const r = runden[id];
+  document.querySelectorAll(".runde").forEach(el => el.classList.toggle("aktiv", +el.dataset.id === id));
+  const d = new Date(r.start * 1000);
+  const tempo = r.strecke_m / 1000 / (r.dauer_s / 3600);
+  document.getElementById("detail-kopf").innerHTML = `
+    <h2>${datumLang(d)}</h2>
+    <div class="sub">${uhrzeit(r.start)} – ${uhrzeit(r.ende)} Uhr
+      ${r.start_zuhause ? "· Start zu Hause" : "· Start unterwegs"}
+      ${r.ende_zuhause ? "· Ende zu Hause" : "· Ende unterwegs (Pause)"}
+      ${r.zeit_aus_aktivitaet ? "· Zeit aus Tractive-Aktivität" : ""}</div>`;
+  document.getElementById("detail-kacheln").innerHTML = `
+      <div class="kachel"><div class="w">${dauer(r.dauer_s)}</div><div class="l">Dauer</div></div>
+      <div class="kachel"><div class="w">${km(r.strecke_m)} km</div><div class="l">Strecke</div></div>
+      <div class="kachel"><div class="w">${tempo.toLocaleString("de-DE", { maximumFractionDigits: 1 })} km/h</div><div class="l">Ø Tempo</div></div>
+      <div class="kachel"><div class="w">${entfernung(r.max_entfernung_m)}</div><div class="l">max. von zu Hause</div></div>`;
+  if (vonKlick) document.body.classList.add("detail-offen");
+  karteZeigen(r);
+  if (vonKlick) window.scrollTo({ top: 0 });
+}
+
+// ---------- Statistik ----------
+const charts = {}, modus = { tag: "zeit", woche: "zeit" };
+document.querySelectorAll(".umschalter").forEach(u => u.querySelectorAll("button").forEach(b => b.onclick = () => {
+  u.querySelectorAll("button").forEach(x => x.classList.toggle("aktiv", x === b));
+  modus[u.dataset.chart] = b.dataset.m;
+  zeichneStatistik();
+}));
+
+function summen(filter) {
+  const l = runden.filter(filter);
+  return { n: l.length, s: l.reduce((a, r) => a + r.dauer_s, 0), m: l.reduce((a, r) => a + r.strecke_m, 0) };
+}
+
+function zeichneStatistik() {
+  const jetzt = new Date();
+  const heute0 = new Date(jetzt); heute0.setHours(0, 0, 0, 0);
+  const woche0 = wochenStart(jetzt);
+  const vor7 = new Date(heute0); vor7.setDate(vor7.getDate() - 6);
+  const h = summen(r => r.start * 1000 >= heute0);
+  const w = summen(r => r.start * 1000 >= woche0);
+  const s7 = summen(r => r.start * 1000 >= vor7);
+  const kachel = (wert, label) => `<div class="card"><div class="w">${wert}</div><div class="l">${label}</div></div>`;
+  document.getElementById("stat-kopf").innerHTML =
+    kachel(dauer(h.s), `Heute · ${h.n} Runden · ${km(h.m)} km`) +
+    kachel(dauer(w.s), `Diese Woche · ${w.n} Runden · ${km(w.m)} km`) +
+    kachel(dauer(s7.s / 7), `Ø pro Tag (7 Tage) · ${km(s7.m / 7)} km`) +
+    kachel(s7.n ? dauer(s7.s / s7.n) : "–", `Ø pro Runde (7 Tage) · ${s7.n ? km(s7.m / s7.n) : "0,0"} km`);
+
+  // pro Tag
+  const tage = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(heute0); d.setDate(d.getDate() - i); tage.push(d); }
+  // pro Tag: jede Runde ein eigenes Segment (1. Runde, 2. Runde, ...)
+  const tagRunden = tage.map(d => {
+    const k = tagSchluessel(d);
+    return runden.filter(r => tagSchluessel(new Date(r.start * 1000)) === k).sort((a, b) => a.start - b.start);
+  });
+  const anzahl = Math.max(1, ...tagRunden.map(l => l.length));
+  const gruppenTag = [];
+  for (let i = 0; i < anzahl; i++) gruppenTag.push({ name: (i + 1) + ". Runde", proBalken: tagRunden.map(l => l[i] ? [l[i]] : []) });
+  balken("tag", tage.map(d => WT[d.getDay()] + " " + d.getDate() + "."), gruppenTag, (gruppe, liste) =>
+    gruppe + ": " + uhrzeit(liste[0].start) + "–" + uhrzeit(liste[0].ende));
+
+  // pro Woche: nach Tageszeit gestapelt
+  const wochen = [];
+  for (let i = 7; i >= 0; i--) { const d = new Date(woche0); d.setDate(d.getDate() - 7 * i); wochen.push(d); }
+  const wochenRunden = wochen.map(d => {
+    const ende = new Date(d); ende.setDate(ende.getDate() + 7);
+    return runden.filter(r => r.start * 1000 >= d && r.start * 1000 < ende);
+  });
+  const tageszeit = r => { const h = new Date(r.start * 1000).getHours(); return h >= 4 && h < 11 ? 0 : h >= 11 && h < 17 ? 1 : 2; };
+  const gruppenWoche = ["Morgens", "Mittags", "Abends"].map((name, i) =>
+    ({ name, proBalken: wochenRunden.map(l => l.filter(r => tageszeit(r) === i)) }));
+  balken("woche", wochen.map(d => "KW " + kw(d)), gruppenWoche, (gruppe, liste) =>
+    gruppe + " (" + liste.length + " Runden)");
+}
+
+// Farben für die Segmente; in beiden Farbschemata gut unterscheidbar
+const SEGMENT_FARBEN = ["#e0682b", "#2f7fbf", "#3a9d5d", "#9b59b6", "#d4a017", "#c0392b", "#16a2a2", "#7f8c8d"];
+
+function balken(art, labels, gruppen, beschriftung, aktivMinuten) {
+  const zeit = modus[art] === "zeit";
+  const wert = liste => {
+    const s = liste.reduce((a, r) => a + (zeit ? r.dauer_s : r.strecke_m), 0);
+    return liste.length ? (zeit ? Math.round(s / 60) : +(s / 1000).toFixed(2)) : null;
+  };
+  const format = v => zeit ? dauer(v * 60) : v.toLocaleString("de-DE") + " km";
+  if (charts[art]) charts[art].destroy();
+  const text = css("--muted"), linie = css("--line"), karteFarbe = css("--card");
+  const datasets = gruppen.map((g, i) => ({
+    label: g.name,
+    data: g.proBalken.map(wert),
+    backgroundColor: SEGMENT_FARBEN[i % SEGMENT_FARBEN.length],
+    borderColor: karteFarbe, borderWidth: { top: 1.5 }, borderSkipped: false,
+    maxBarThickness: 36, stack: "summe", order: 2
+  }));
+  // Aktivzeit laut Tractive als Markierung (nur in der Zeit-Ansicht)
+  if (aktivMinuten && zeit) datasets.push({
+    type: "line", label: "Aktiv (Tractive)", data: aktivMinuten, stack: "aktiv", order: 1,
+    showLine: false, pointStyle: "line", pointRadius: 14, pointHoverRadius: 16,
+    borderColor: css("--text"), borderWidth: 3, backgroundColor: css("--text")
+  });
+  charts[art] = new Chart(document.getElementById("chart-" + art), {
+    type: "bar",
+    data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: {
+        legend: { display: true, position: "bottom", labels: { color: text, boxWidth: 12, boxHeight: 12 } },
+        tooltip: { mode: "index", filter: c => c.raw != null, callbacks: {
+          label: c => c.dataset.type === "line" ? "Aktiv laut Tractive: " + dauer(c.raw * 60)
+            : beschriftung(gruppen[c.datasetIndex].name, gruppen[c.datasetIndex].proBalken[c.dataIndex]) + " · " + format(c.raw),
+          footer: items => "Gassi gesamt: " + format(items.filter(c => c.dataset.type !== "line").reduce((a, c) => a + c.raw, 0))
+        } }
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: text, autoSkip: true, maxRotation: 0 }, grid: { display: false } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: text, callback: v => zeit ? v + " min" : v + " km" }, grid: { color: linie } }
+      }
+    }
+  });
+}
+
+// ---------- Aktivität (Bewegungssensor) ----------
+const ZUSTAND = {
+  ACTIVE: ["Aktiv", "--z-aktiv"], VERY_ACTIVE: ["Sehr aktiv", "--z-aktiv"],
+  REST: ["Ruhe", "--z-ruhe"], SLEEP: ["Schlaf", "--z-schlaf"]
+};
+function zeichneAktivitaet() {
+  const tageMitDaten = Object.keys(AKTIV).sort().reverse();
+  const kopf = document.getElementById("aktiv-kopf");
+  const liste = document.getElementById("aktiv-tage");
+  if (!tageMitDaten.length) {
+    kopf.innerHTML = "";
+    liste.innerHTML = '<div class="leer">Noch keine Aktivitätsdaten gespeichert. Sie werden jeden Abend um 23:55 abgerufen.</div>';
+    return;
+  }
+  const heute = tagSchluessel(new Date());
+  const istVollstaendig = k => { const s = new Date(AKTIV[k].stand * 1000); return tagSchluessel(s) !== k || s.getHours() * 60 + s.getMinutes() >= 23 * 60 + 50; };
+  const fertig = tageMitDaten.filter(istVollstaendig).slice(0, 7);
+  const schnitt = fertig.length ? fertig.reduce((a, k) => a + (AKTIV[k].minuten_aktiv || 0), 0) / fertig.length : null;
+  const kachel = (wert, label) => `<div class="card"><div class="w">${wert}</div><div class="l">${label}</div></div>`;
+  kopf.innerHTML =
+    kachel(AKTIV[heute] ? dauer(AKTIV[heute].minuten_aktiv * 60) : "–", "Heute aktiv (bisher)") +
+    kachel(schnitt != null ? dauer(schnitt * 60) : "–", `Ø aktiv pro Tag (${fertig.length} vollständige Tage)`) +
+    kachel(tageMitDaten.length, "Tage mit Aktivitätsdaten");
+
+  // Balken: aktive Minuten der letzten 14 Tage
+  const heute0 = new Date(); heute0.setHours(0, 0, 0, 0);
+  const tage = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(heute0); d.setDate(d.getDate() - i); tage.push(d); }
+  if (charts.aktiv) charts.aktiv.destroy();
+  charts.aktiv = new Chart(document.getElementById("chart-aktiv"), {
+    type: "bar",
+    data: { labels: tage.map(d => WT[d.getDay()] + " " + d.getDate() + "."),
+            datasets: [{ data: tage.map(d => AKTIV[tagSchluessel(d)] ? AKTIV[tagSchluessel(d)].minuten_aktiv : null),
+                         backgroundColor: css("--z-aktiv"), borderRadius: 4, maxBarThickness: 36 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => "aktiv " + dauer(c.raw * 60) } } },
+      scales: {
+        x: { ticks: { color: css("--muted"), maxRotation: 0, autoSkip: true }, grid: { display: false } },
+        y: { beginAtZero: true, ticks: { color: css("--muted"), callback: v => v + " min" }, grid: { color: css("--line") } }
+      }
+    }
+  });
+
+  // Tagesverlauf: neuester Tag oben
+  const pct = (ts, t0) => Math.max(0, Math.min(100, (ts - t0) / 864));
+  let html = "";
+  for (const k of tageMitDaten) {
+    const a = AKTIV[k];
+    const t0 = new Date(k + "T00:00:00").getTime() / 1000;
+    const name = k === heute ? "Heute" : datumLang(new Date(k + "T12:00:00"));
+    const hinweis = istVollstaendig(k) ? "" : ` · Stand ${uhrzeit(a.stand)} (unvollständig)`;
+    const segs = (a.segmente || []).map(([s, e, z]) => {
+      const [label, farbe] = ZUSTAND[z] || [z, "--z-ruhe"];
+      return `<div style="left:${pct(s, t0)}%;width:${pct(e, t0) - pct(s, t0)}%;background:var(${farbe})"
+                   title="${uhrzeit(s)}–${uhrzeit(e)} ${label} (${dauer(e - s)})"></div>`;
+    }).join("");
+    const gassi = runden.filter(r => tagSchluessel(new Date(r.start * 1000)) === k).map(r =>
+      `<div style="left:${pct(r.start, t0)}%;width:${Math.max(0.4, pct(r.ende, t0) - pct(r.start, t0))}%"
+            title="Gassirunde ${uhrzeit(r.start)}–${uhrzeit(r.ende)} (${dauer(r.dauer_s)})"></div>`).join("");
+    const aktivListe = (a.segmente || []).filter(s => s[2].includes("ACTIVE") && s[1] - s[0] >= 10 * 60)
+      .map(s => `${uhrzeit(s[0])}–${uhrzeit(s[1])}`).join(", ");
+    html += `<div class="atag">
+      <div class="atag-kopf"><span><b>${name}</b> · aktiv ${dauer((a.minuten_aktiv || 0) * 60)}<span class="klein">${hinweis}</span></span>
+        <span class="klein">${aktivListe ? "längere Aktivphasen: " + aktivListe : ""}</span></div>
+      <div class="streifen">${segs}</div>
+      <div class="gassi">${gassi}</div>
+      <div class="achse"><span style="left:0">0</span><span style="left:25%">6</span><span style="left:50%">12</span><span style="left:75%">18</span><span style="left:100%">24 Uhr</span></div>
+    </div>`;
+  }
+  liste.innerHTML = html;
+}
+
+// ---------- Start ----------
+zeichneListe();
+if (runden.length) zeigeRunde(0, false);
+else document.getElementById("detail").innerHTML = '<div class="leer">Keine Runde ausgewählt.</div>';
+window.addEventListener("resize", () => karte && karte.resize());
+</script>
+</body>
+</html>
