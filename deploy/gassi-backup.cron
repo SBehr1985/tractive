@@ -1,0 +1,3 @@
+# Nächtliche Sicherung der Gassi-Datenbank. Installiert als /etc/cron.d/gassi-backup (siehe START.md).
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+30 3 * * * root /opt/gassi/deploy/backup.sh >> /var/log/gassi-backup.log 2>&1

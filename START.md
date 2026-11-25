@@ -72,11 +72,21 @@ Server wie bei crnews: `ssh root@2.31.4.115`.
 | `docker compose restart app` | nach Änderung der `.env` |
 | `docker compose exec db psql -U gassi -d gassi` | Datenbank-Konsole (`\q` beendet) |
 
-**Sicherung:**
+**Sicherung (automatisch):** jede Nacht um 03:30 legt `deploy/backup.sh` eine Datei
+`/opt/backups/gassi/gassi_JJJJ-MM-TT.dump` an und behält die letzten 14 Tage. Protokoll: `/var/log/gassi-backup.log`.
+Eingerichtet mit:
 ```bash
-docker compose exec -T db pg_dump -U gassi -Fc gassi > gassi_$(date +%F).dump
+cp /opt/gassi/deploy/gassi-backup.cron /etc/cron.d/gassi-backup
 ```
-Die Sicherung enthält die verschlüsselten Tractive-Tokens: nie in Git, nach dem Kopieren löschen.
+Von Hand sichern: `/opt/gassi/deploy/backup.sh`. Zurückspielen (App vorher anhalten):
+```bash
+docker compose stop app
+docker compose exec -T db pg_restore -U gassi -d gassi --clean --if-exists --no-owner < /opt/backups/gassi/gassi_2026-11-26.dump
+docker compose start app
+```
+Die Sicherungen liegen auf demselben Server; gegen einen Totalausfall hilft nur eine Kopie woanders
+(z. B. `scp root@2.31.4.115:/opt/backups/gassi/*.dump .`). Sie enthalten die verschlüsselten Tractive-Tokens:
+nie in Git.
 
 ## 4. Gut zu wissen
 
