@@ -11,7 +11,7 @@ chmod 700 "$ZIEL"
 DATEI="$ZIEL/gassi_$(date +%F).dump"
 
 cd /opt/gassi
-docker compose exec -T db pg_dump -U gassi -Fc gassi > "$DATEI.tmp"
+docker compose exec -T db pg_dump -U gassi -Fc gassi < /dev/null > "$DATEI.tmp"
 mv "$DATEI.tmp" "$DATEI"
 chmod 600 "$DATEI"
 
