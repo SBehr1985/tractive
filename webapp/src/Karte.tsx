@@ -7,9 +7,12 @@ import { css, uhrzeit } from './format'
 type Props = {
   config: Config
   zuhause: Zuhause | null
-  runde: Runde | null
+  runden: Runde[]                 // Runden des Tages mit Strecke
+  farben: Record<number, string>  // Start-Zeitstempel -> Farbe
+  auswahl: number | null          // Start der gewählten Runde, null = alle
   position: Position | null
-  fokus: 'runde' | 'position'
+  fokusPosition: number           // erhöht = zur Position fliegen
+  abstandUnten: number            // Höhe des Bedienfelds unten (für den Bildausschnitt)
 }
 
 const OSM: StyleSpecification = {
@@ -18,9 +21,8 @@ const OSM: StyleSpecification = {
                     attribution: '© OpenStreetMap-Mitwirkende' } },
   layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
 }
-// eigene Ebenen; die Reihenfolge ist die Zeichenreihenfolge (letzte liegt oben)
+// eigene Ebenen; Reihenfolge = Zeichenreihenfolge (letzte liegt oben)
 const EIGENE = ['zuhause-flaeche', 'zuhause-rand', 'strecke-rand', 'strecke']
-
 type GeoDaten = Parameters<maplibregl.GeoJSONSource['setData']>[0]
 
 function kreis(lat: number, lon: number, radius: number): GeoDaten {
@@ -32,18 +34,18 @@ function kreis(lat: number, lon: number, radius: number): GeoDaten {
   return { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [coords] } }
 }
 
-function pin(farbe: string) {
+function pin(farbe: string, klasse = 'pin') {
   const el = document.createElement('div')
-  el.className = 'pin'
+  el.className = klasse
   el.style.background = farbe
   return new maplibregl.Marker({ element: el })
 }
 
-export default function Karte({ config, zuhause, runde, position, fokus }: Props) {
+export default function Karte({ config, zuhause, runden, farben, auswahl, position, fokusPosition, abstandUnten }: Props) {
   const box = useRef<HTMLDivElement>(null)
   const karte = useRef<maplibregl.Map | null>(null)
-  const daten = useRef({ zuhause, runde })
-  daten.current = { zuhause, runde }
+  const daten = useRef({ zuhause, runden, farben, auswahl })
+  daten.current = { zuhause, runden, farben, auswahl }
   const pins = useRef<{ start?: maplibregl.Marker; ende?: maplibregl.Marker; pos?: maplibregl.Marker }>({})
 
   const stile: [string, string][] = []
@@ -55,22 +57,28 @@ export default function Karte({ config, zuhause, runde, position, fokus }: Props
   const [stil, setStil] = useState(0)
 
   function quellen(): Record<string, maplibregl.GeoJSONSourceSpecification> {
-    const { zuhause, runde } = daten.current
-    const q: Record<string, maplibregl.GeoJSONSourceSpecification> = {}
-    q.strecke = { type: 'geojson', data: { type: 'Feature', properties: {}, geometry: {
-      type: 'LineString', coordinates: (runde?.punkte ?? []).map(p => [p[1], p[0]]) } } }
-    q.zuhause = { type: 'geojson', data: zuhause ? kreis(zuhause.lat, zuhause.lon, zuhause.radius_m)
-                                                 : { type: 'FeatureCollection', features: [] } }
-    return q
+    const { zuhause, runden, farben, auswahl } = daten.current
+    // gewählte Runde zuletzt, damit sie oben liegt
+    const sortiert = [...runden].sort((a, b) => Number(a.start === auswahl) - Number(b.start === auswahl))
+    return {
+      strecke: { type: 'geojson', data: { type: 'FeatureCollection', features: sortiert.filter(r => r.punkte?.length).map(r => ({
+        type: 'Feature',
+        properties: { farbe: farben[r.start] ?? css('--accent'), aktiv: auswahl == null || auswahl === r.start ? 1 : 0 },
+        geometry: { type: 'LineString', coordinates: r.punkte!.map(p => [p[1], p[0]]) },
+      })) } },
+      zuhause: { type: 'geojson', data: zuhause ? kreis(zuhause.lat, zuhause.lon, zuhause.radius_m)
+                                                : { type: 'FeatureCollection', features: [] } },
+    }
   }
   function ebenen(): maplibregl.LayerSpecification[] {
+    const aktiv = ['==', ['get', 'aktiv'], 1] as maplibregl.ExpressionSpecification
     return [
       { id: 'zuhause-flaeche', type: 'fill', source: 'zuhause', paint: { 'fill-color': '#555', 'fill-opacity': 0.1 } },
       { id: 'zuhause-rand', type: 'line', source: 'zuhause', paint: { 'line-color': '#555', 'line-width': 1, 'line-dasharray': [2, 2] } },
       { id: 'strecke-rand', type: 'line', source: 'strecke', layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': '#ffffff', 'line-width': 7, 'line-opacity': 0.9 } },
+        paint: { 'line-color': '#ffffff', 'line-width': ['case', aktiv, 8, 5], 'line-opacity': ['case', aktiv, 0.95, 0.4] } },
       { id: 'strecke', type: 'line', source: 'strecke', layout: { 'line-join': 'round', 'line-cap': 'round' },
-        paint: { 'line-color': css('--accent'), 'line-width': 4 } },
+        paint: { 'line-color': ['get', 'farbe'], 'line-width': ['case', aktiv, 5, 3], 'line-opacity': ['case', aktiv, 1, 0.35] } },
     ]
   }
   function ebenenSetzen() {
@@ -93,7 +101,7 @@ export default function Karte({ config, zuhause, runde, position, fokus }: Props
       container: box.current!,
       style: stile.length ? stilUrl(stile[0][1]) : OSM,
       attributionControl: { compact: true },
-      center: zuhause ? [zuhause.lon, zuhause.lat] : [10, 51], zoom: zuhause ? 14 : 5,
+      center: zuhause ? [zuhause.lon, zuhause.lat] : [10, 51], zoom: zuhause ? 15 : 5,
     })
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
     m.on('style.load', ebenenSetzen)
@@ -104,37 +112,46 @@ export default function Karte({ config, zuhause, runde, position, fokus }: Props
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Runde anzeigen
+  // Runden des Tages / Auswahl anzeigen
   useEffect(() => {
     const m = karte.current
     if (!m) return
     if (m.isStyleLoaded()) ebenenSetzen(); else m.once('idle', ebenenSetzen)
     pins.current.start?.remove(); pins.current.ende?.remove()
-    const p = runde?.punkte
-    if (p && p.length) {
-      const coords = p.map(x => [x[1], x[0]] as [number, number])
-      pins.current.start = pin(css('--ok')).setLngLat(coords[0])
-        .setPopup(new maplibregl.Popup({ offset: 12 }).setText('Start ' + uhrzeit(runde!.start))).addTo(m)
-      pins.current.ende = pin('#c0392b').setLngLat(coords[coords.length - 1])
-        .setPopup(new maplibregl.Popup({ offset: 12 }).setText('Ende ' + uhrzeit(runde!.ende))).addTo(m)
-      if (fokus === 'runde') {
-        const b = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]))
-        m.fitBounds(b, { padding: 40, duration: 0, maxZoom: 17 })
+    const sichtbar = runden.filter(r => r.punkte?.length && (auswahl == null || r.start === auswahl))
+    const padding = { top: 60, bottom: abstandUnten + 20, left: 30, right: 30 }
+    if (sichtbar.length) {
+      const coords = sichtbar.flatMap(r => r.punkte!.map(p => [p[1], p[0]] as [number, number]))
+      const b = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]))
+      m.fitBounds(b, { padding, duration: 400, maxZoom: 17 })
+      if (auswahl != null) {
+        const r = sichtbar[0], p = r.punkte!
+        pins.current.start = pin(css('--ok')).setLngLat([p[0][1], p[0][0]])
+          .setPopup(new maplibregl.Popup({ offset: 12 }).setText('Start ' + uhrzeit(r.start))).addTo(m)
+        pins.current.ende = pin('#c0392b').setLngLat([p[p.length - 1][1], p[p.length - 1][0]])
+          .setPopup(new maplibregl.Popup({ offset: 12 }).setText('Ende ' + uhrzeit(r.ende))).addTo(m)
       }
+    } else if (zuhause) {
+      m.easeTo({ center: [zuhause.lon, zuhause.lat], zoom: 15, padding, duration: 400 })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runde, zuhause])
+  }, [runden, auswahl, zuhause, farben])
 
-  // aktuelle Position
+  // letzte Position als blauer Punkt; Klick auf das Positions-Abzeichen fliegt hin
   useEffect(() => {
     const m = karte.current
     if (!m) return
     pins.current.pos?.remove()
     if (!position || position.lat == null) return
-    pins.current.pos = pin('#2f7fbf').setLngLat([position.lon, position.lat])
-      .setPopup(new maplibregl.Popup({ offset: 12 }).setText('Letzte Position ' + uhrzeit(position.zeit) + ' Uhr')).addTo(m)
-    if (fokus === 'position') m.flyTo({ center: [position.lon, position.lat], zoom: 16, duration: 600 })
-  }, [position, fokus])
+    pins.current.pos = pin('#2f7fbf', 'pin pos').setLngLat([position.lon, position.lat])
+      .setPopup(new maplibregl.Popup({ offset: 12 }).setText('Letzte Position ' + uhrzeit(position.zeit))).addTo(m)
+  }, [position])
+  useEffect(() => {
+    const m = karte.current
+    if (!m || !fokusPosition || !position) return
+    m.flyTo({ center: [position.lon, position.lat], zoom: 16, duration: 600, padding: { top: 60, bottom: abstandUnten + 20, left: 0, right: 0 } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fokusPosition])
 
   function stilWechseln(i: number) {
     const m = karte.current
@@ -153,7 +170,7 @@ export default function Karte({ config, zuhause, runde, position, fokus }: Props
   }
 
   return (
-    <div className="karte-wrap">
+    <div className="karte-voll">
       <div ref={box} className="karte" />
       {stile.length > 1 && (
         <div className="stilwahl">

@@ -3,12 +3,15 @@ import { api, NichtAngemeldet, type AktivTag, type Config, type Me, type Positio
 import Aktivitaet from './Aktivitaet'
 import Einstellungen from './Einstellungen'
 import { abstandM, entfernung, uhrzeit } from './format'
+import Icon, { Badge } from './Icon'
 import Login from './Login'
 import Runden from './Runden'
 import Statistik from './Statistik'
 
 type Ansicht = 'runden' | 'statistik' | 'aktivitaet' | 'einstellungen'
-const ANSICHTEN: [Ansicht, string][] = [['runden', 'Runden'], ['statistik', 'Statistik'], ['aktivitaet', 'Aktivität'], ['einstellungen', 'Einstellungen']]
+const ANSICHTEN: [Ansicht, string, string][] = [
+  ['runden', 'karte', 'Karte'], ['statistik', 'balken', 'Statistik'], ['aktivitaet', 'aktiv', 'Aktivität'], ['einstellungen', 'regler', 'Einstellungen'],
+]
 
 function merken(k: string, v?: string) {
   try { if (v === undefined) return localStorage.getItem(k) ?? undefined; localStorage.setItem(k, v) } catch { /* privat */ }
@@ -82,61 +85,71 @@ export default function App() {
   if (!me.hunde.length) {
     return (
       <div className="login"><div className="card">
-        <h1>Kein Hund verbunden</h1>
-        <p className="sub">Mit dem Tractive-Konto {me.email} ist kein Tracker verbunden. Sobald ein Hund in deinem Tractive-Konto
-          freigegeben ist, erscheint er hier nach erneuter Anmeldung.</p>
-        <button onClick={abmelden}>Abmelden</button>
+        <h1><Icon name="pfote" size={22} /> Kein Hund verbunden</h1>
+        <p className="sub">Mit {me.email} ist in Tractive kein Tracker verbunden.</p>
+        <button onClick={abmelden}><Icon name="abmelden" /> Abmelden</button>
       </div></div>
     )
   }
 
   const z = hund?.zuhause
   const weg = position && z ? abstandM(z.lat, z.lon, position.lat, position.lon) : null
-  const wo = weg == null ? '' : weg <= z!.radius_m ? 'zu Hause' : entfernung(weg) + ' von zu Hause'
+  const zuHause = weg != null && weg <= z!.radius_m
+  const stand = hund?.letzter_sync ? new Date(hund.letzter_sync) : null
 
   return (
-    <>
-      <header>
-        <div className="kopfzeile">
-          <h1>{aktuellerHund?.name ?? 'Gassi'} – Gassi-Runden</h1>
-          <div className="kopf-rechts">
-            {me.hunde.length > 1 && (
-              <select value={aktuellerHund?.id} onChange={e => { setHundId(e.target.value); merken('hund', e.target.value) }}>
-                {me.hunde.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
-              </select>
-            )}
-            <button onClick={aktualisieren} disabled={laedt} title="Jetzt Daten von Tractive holen">{laedt ? 'Lädt …' : '↻'}</button>
-            <button onClick={abmelden}>Abmelden</button>
-          </div>
+    <div className="app">
+      <header className="topbar">
+        <div className="titel">
+          <Icon name="pfote" size={18} />
+          {me.hunde.length > 1 ? (
+            <select value={aktuellerHund?.id} onChange={e => { setHundId(e.target.value); merken('hund', e.target.value) }}>
+              {me.hunde.map(h => <option key={h.id} value={h.id}>{h.name}</option>)}
+            </select>
+          ) : <b>{aktuellerHund?.name}</b>}
         </div>
-        <div className="sub">
-          {hund?.letzter_sync ? 'Stand: ' + new Date(hund.letzter_sync).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' }) : ''}
-          {runden.length ? ` · ${runden.length} Runden` : ''}
+        <div className="badges">
+          {position && position.lat != null && (
+            <button className="badge-knopf" title={`Letzte Position ${uhrzeit(position.zeit)} – auf Karte zeigen`}
+                    onClick={() => { setAnsicht('runden'); setFokusPosition(n => n + 1) }}>
+              <Badge icon={zuHause ? 'haus' : 'pin'} ton={zuHause ? undefined : 'live'}>
+                {zuHause ? uhrzeit(position.zeit) : entfernung(weg ?? 0)}
+              </Badge>
+            </button>
+          )}
+          {position?.akku != null && <Badge icon="akku" ton={position.akku < 20 ? 'warn' : undefined} title="Akku">{position.akku}%</Badge>}
+          <button className="icon-knopf" onClick={aktualisieren} disabled={laedt}
+                  title={'Jetzt aktualisieren' + (stand ? ' · Stand ' + stand.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '')}>
+            <span className={laedt ? 'dreht' : ''}><Icon name="sync" size={17} /></span>
+          </button>
+          <button className="icon-knopf" onClick={abmelden} title="Abmelden"><Icon name="abmelden" size={17} /></button>
         </div>
-        {!me.tractive_ok && <div className="hinweis">Der Tractive-Zugang ist abgelaufen. Bitte abmelden und neu anmelden, damit wieder Daten kommen.</div>}
-        {hund?.laedt && <div className="hinweis">Die Daten der letzten 30 Tage werden gerade von Tractive geladen …</div>}
-        {fehler && <div className="hinweis fehler">{fehler}</div>}
-        {position && position.lat != null && (
-          <div className="card position">
-            <span>📍 Letzte Position: <b>{uhrzeit(position.zeit)} Uhr</b>{wo && ' · ' + wo}
-              {position.akku != null && ` · Akku ${position.akku} %`}</span>
-            <button onClick={() => { setAnsicht('runden'); setFokusPosition(n => n + 1) }}>Auf Karte zeigen</button>
-          </div>
-        )}
       </header>
-      <nav>
-        {ANSICHTEN.map(([k, name]) => <button key={k} className={ansicht === k ? 'aktiv' : ''} onClick={() => setAnsicht(k)}>{name}</button>)}
-      </nav>
-      <main>
+      {(!me.tractive_ok || hund?.laedt || fehler) && (
+        <div className="hinweis">
+          {!me.tractive_ok ? 'Tractive-Zugang abgelaufen – bitte ab- und wieder anmelden.'
+            : hund?.laedt ? 'Lade die letzten 30 Tage von Tractive …' : fehler}
+        </div>
+      )}
+
+      <main className={ansicht === 'runden' ? 'voll' : 'scroll'}>
         {!hund || !config ? <div className="leer">Lade …</div>
           : ansicht === 'runden' ? <Runden key={hund.id} hundId={hund.id} config={config} runden={runden} zuhause={hund.zuhause}
                                            position={position} fokusPosition={fokusPosition}
-                                           zuhauseSeit={weg != null && weg <= z!.radius_m ? position!.zeit : null} />
+                                           zuhauseSeit={zuHause ? position!.zeit : null} />
           : ansicht === 'statistik' ? <Statistik runden={runden} />
           : ansicht === 'aktivitaet' ? <Aktivitaet tage={aktiv} runden={runden} />
           : <Einstellungen key={hund.id} hund={hund} position={position}
                            gespeichert={u => { setHund(u); api.runden(u.id).then(setRunden) }} />}
       </main>
-    </>
+
+      <nav className="tabbar">
+        {ANSICHTEN.map(([k, icon, name]) => (
+          <button key={k} className={ansicht === k ? 'aktiv' : ''} onClick={() => setAnsicht(k)}>
+            <Icon name={icon} size={20} /><span>{name}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
   )
 }

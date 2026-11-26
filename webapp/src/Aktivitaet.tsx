@@ -2,7 +2,8 @@ import type { ChartConfiguration } from 'chart.js'
 import { useMemo } from 'react'
 import type { AktivTag, Runde } from './api'
 import Diagramm from './Diagramm'
-import { WT, css, dauer, letzteTage, tagName, tagSchluessel, tagVon, uhrzeit } from './format'
+import { WT, css, dauer, dauerKurz, letzteTage, tagName, tagSchluessel, tagVon, uhrzeit } from './format'
+import Icon, { Badge } from './Icon'
 
 const ZUSTAND: Record<string, [string, string]> = {
   ACTIVE: ['Aktiv', '--z-aktiv'], VERY_ACTIVE: ['Sehr aktiv', '--z-aktiv'],
@@ -38,27 +39,30 @@ export default function Aktivitaet({ tage, runden }: { tage: AktivTag[]; runden:
   if (!tage.length) {
     return <section><div className="card leer">Noch keine Aktivitätsdaten gespeichert. Sie werden tagsüber und jeden Abend um 23:55 abgerufen.</div></section>
   }
-  const kachel = (wert: string, label: string) => <div className="card"><div className="w">{wert}</div><div className="l">{label}</div></div>
+  const kachel = (titel: string, wert: string, zusatz?: React.ReactNode) => (
+    <div className="card kpi"><div className="l">{titel}</div><div className="w">{wert}</div>{zusatz && <div className="badges">{zusatz}</div>}</div>
+  )
 
   return (
     <section>
       <div className="stat-kopf">
-        {kachel(proTag[heute]?.minuten_aktiv != null ? dauer(proTag[heute].minuten_aktiv! * 60) : '–', 'Heute aktiv (bisher)')}
-        {kachel(schnitt != null ? dauer(schnitt * 60) : '–', `Ø aktiv pro Tag (${fertig.length} vollständige Tage)`)}
-        {kachel(String(tage.length), 'Tage mit Aktivitätsdaten')}
+        {kachel('Heute aktiv', proTag[heute]?.minuten_aktiv != null ? dauerKurz(proTag[heute].minuten_aktiv! * 60) : '–',
+                proTag[heute] && <Badge icon="uhr" title="Stand">{uhrzeit(proTag[heute].abgerufen_at)}</Badge>)}
+        {kachel('Ø Tag', schnitt != null ? dauerKurz(schnitt * 60) : '–', <Badge icon="kalender" title="vollständige Tage">{fertig.length}</Badge>)}
+        {kachel('Tage', String(tage.length))}
       </div>
       <div className="card diagramm">
-        <div className="diagramm-kopf"><h3>Aktive Minuten pro Tag (letzte 14 Tage)</h3></div>
-        <Diagramm config={config} />
+        <div className="diagramm-kopf"><h3><Icon name="aktiv" /> Aktiv · 14 Tage</h3></div>
+        <Diagramm config={config} hoehe={200} />
       </div>
       <div className="card diagramm">
         <div className="diagramm-kopf">
-          <h3>Tagesverlauf</h3>
+          <h3><Icon name="uhr" /> Verlauf</h3>
           <div className="legende">
             <span><i style={{ background: 'var(--z-aktiv)' }} />Aktiv</span>
             <span><i style={{ background: 'var(--z-ruhe)' }} />Ruhe</span>
             <span><i style={{ background: 'var(--z-schlaf)' }} />Schlaf</span>
-            <span><i style={{ background: 'var(--ok)' }} />Gassirunde (GPS)</span>
+            <span><i style={{ background: 'var(--ok)' }} />Gassi</span>
           </div>
         </div>
         {tage.map(t => {
@@ -69,10 +73,13 @@ export default function Aktivitaet({ tage, runden }: { tage: AktivTag[]; runden:
           return (
             <div className="atag" key={t.tag}>
               <div className="atag-kopf">
-                <span><b>{tagName(t.tag)}</b> · aktiv {dauer((t.minuten_aktiv || 0) * 60)}
-                  {!t.vollstaendig && <span className="klein"> · Stand {uhrzeit(t.abgerufen_at)}{t.tag !== heute ? ' (unvollständig)' : ''}</span>}
+                <span className="badges">
+                  <b>{tagName(t.tag)}</b>
+                  <Badge icon="aktiv" title="aktiv">{dauerKurz((t.minuten_aktiv || 0) * 60)}</Badge>
+                  {gassi.length > 0 && <Badge icon="pfote" title="Gassirunden">{gassi.length}</Badge>}
+                  {!t.vollstaendig && t.tag !== heute && <Badge icon="uhr" ton="warn" title="unvollständig">bis {uhrzeit(t.abgerufen_at)}</Badge>}
                 </span>
-                {lange.length > 0 && <span className="klein">längere Aktivphasen: {lange.map(s => `${uhrzeit(s[0])}–${uhrzeit(s[1])}`).join(', ')}</span>}
+                {lange.length > 0 && <span className="klein" title="längere Aktivphasen">{lange.map(s => `${uhrzeit(s[0])}–${uhrzeit(s[1])}`).join(' · ')}</span>}
               </div>
               <div className="streifen">
                 {t.segmente.map(([s, e, z], i) => {

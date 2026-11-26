@@ -45,6 +45,8 @@ export const api = {
   uebersicht: (id: string) => call<Uebersicht>(h(id)),
   runden: (id: string) => call<Runde[]>(h(id) + '/runden'),
   runde: (id: string, start: number) => call<Runde>(h(id) + '/runden/' + start),
+  rundenMitStrecke: (id: string, von: number, bis: number) =>
+    call<Runde[]>(h(id) + `/runden?von=${von}&bis=${bis}&punkte=true`),
   aktivitaet: (id: string) => call<AktivTag[]>(h(id) + '/aktivitaet'),
   position: (id: string) => call<Position>(h(id) + '/position'),
   einstellungen: (id: string, body: Einstellungen) =>

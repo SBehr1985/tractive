@@ -14,6 +14,15 @@ export function dauer(s: number) {
   return Math.floor(min / 60) + ' h ' + zwei(min % 60) + ' min'
 }
 export const entfernung = (m: number) => (m < 1000 ? Math.round(m) + ' m' : km(m) + ' km')
+/** kurz: "37 min" bzw. "1:20 h" */
+export function dauerKurz(s: number) {
+  const min = Math.round(s / 60)
+  return min < 60 ? min + ' min' : Math.floor(min / 60) + ':' + zwei(min % 60) + ' h'
+}
+/** "Do 26.11." */
+export const tagKurz = (d: Date) => WT[d.getDay()] + ' ' + d.getDate() + '.' + (d.getMonth() + 1) + '.'
+// Farben je Runde (1., 2., 3. Runde des Tages ...), in hellem und dunklem Design gut unterscheidbar
+export const RUNDEN_FARBEN = ['#e0682b', '#2f7fbf', '#3a9d5d', '#9b59b6', '#d4a017', '#c0392b', '#16a2a2', '#7f8c8d']
 
 export function tagName(k: string) {
   const heute = tagSchluessel(new Date())

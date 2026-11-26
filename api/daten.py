@@ -51,11 +51,17 @@ def uebersicht(tracker_id: str, user=Depends(get_current_user), conn=Depends(get
 
 
 @router.get("/hunde/{tracker_id}/runden")
-def runden_liste(tracker_id: str, user=Depends(get_current_user), conn=Depends(get_db)):
+def runden_liste(tracker_id: str, von: int | None = None, bis: int | None = None, punkte: bool = False,
+                 user=Depends(get_current_user), conn=Depends(get_db)):
+    """Alle Runden (neueste zuerst). Mit von/bis (Unix-Sekunden, Start der Runde) nur dieser Zeitraum,
+    mit punkte=true inklusive Strecke (für die Tageskarte)."""
     hund_pruefen(conn, user, tracker_id)
+    felder = "start_ts AS start, ende_ts AS ende, dauer_s, strecke_m, max_entfernung_m, start_zuhause, ende_zuhause"
+    if punkte:
+        felder += ", punkte"
     return conn.execute(
-        "SELECT start_ts AS start, ende_ts AS ende, dauer_s, strecke_m, max_entfernung_m, start_zuhause, ende_zuhause "
-        "FROM walks WHERE tracker_id = %s ORDER BY start_ts DESC", (tracker_id,)).fetchall()
+        f"SELECT {felder} FROM walks WHERE tracker_id = %s AND start_ts >= %s AND start_ts < %s ORDER BY start_ts DESC",
+        (tracker_id, von or 0, bis or 2**62)).fetchall()
 
 
 @router.get("/hunde/{tracker_id}/runden/{start_ts}")
