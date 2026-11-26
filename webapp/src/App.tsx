@@ -78,6 +78,14 @@ export default function App() {
     } catch (e) { abgemeldet(e) } finally { setLaedt(false) }
   }
 
+  /** Zur aktuellen Position fliegen: sofort zur bekannten, dann zur frisch abgefragten. */
+  function zurPosition() {
+    setAnsicht('runden')
+    setFokusPosition(n => n + 1)
+    if (!aktuellerHund) return
+    api.position(aktuellerHund.id).then(p => { setPosition(p); setFokusPosition(n => n + 1) }).catch(() => {})
+  }
+
   async function abmelden() { await api.logout().catch(() => {}); setMe(null) }
 
   if (me === undefined) return <div className="leer">Lade …</div>
@@ -111,7 +119,7 @@ export default function App() {
         <div className="badges">
           {position && position.lat != null && (
             <button className="badge-knopf" title={`Letzte Position ${uhrzeit(position.zeit)} – auf Karte zeigen`}
-                    onClick={() => { setAnsicht('runden'); setFokusPosition(n => n + 1) }}>
+                    onClick={zurPosition}>
               <Badge icon={zuHause ? 'haus' : 'pin'} ton={zuHause ? undefined : 'live'}>
                 {zuHause ? uhrzeit(position.zeit) : entfernung(weg ?? 0)}
               </Badge>
@@ -136,7 +144,7 @@ export default function App() {
         {!hund || !config ? <div className="leer">Lade …</div>
           : ansicht === 'runden' ? <Runden key={hund.id} hundId={hund.id} config={config} runden={runden} zuhause={hund.zuhause}
                                            position={position} fokusPosition={fokusPosition}
-                                           zuhauseSeit={zuHause ? position!.zeit : null} />
+                                           zuhauseSeit={zuHause ? position!.zeit : null} zurPosition={zurPosition} />
           : ansicht === 'statistik' ? <Statistik runden={runden} />
           : ansicht === 'aktivitaet' ? <Aktivitaet tage={aktiv} runden={runden} />
           : <Einstellungen key={hund.id} hund={hund} position={position}

@@ -13,6 +13,31 @@ type Props = {
   position: Position | null
   fokusPosition: number           // erhöht = zur Position fliegen
   abstandUnten: number            // Höhe des Bedienfelds unten (für den Bildausschnitt)
+  zurPosition: () => void         // Fadenkreuz: aktuelle Position holen und hinfliegen
+}
+
+const FADENKREUZ = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+  'stroke-linecap="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>'
+
+/** Knopf unter den Zoom-Buttons, der zur aktuellen Position des Hundes fliegt. */
+class PositionsKnopf implements maplibregl.IControl {
+  private box?: HTMLDivElement
+  private klick: () => void
+  constructor(klick: () => void) { this.klick = klick }
+  onAdd() {
+    this.box = document.createElement('div')
+    this.box.className = 'maplibregl-ctrl maplibregl-ctrl-group'
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.className = 'positions-knopf'
+    b.title = 'Zur aktuellen Position'
+    b.setAttribute('aria-label', 'Zur aktuellen Position')
+    b.innerHTML = FADENKREUZ
+    b.onclick = () => this.klick()
+    this.box.appendChild(b)
+    return this.box
+  }
+  onRemove() { this.box?.remove() }
 }
 
 const OSM: StyleSpecification = {
@@ -41,7 +66,9 @@ function pin(farbe: string, klasse = 'pin') {
   return new maplibregl.Marker({ element: el })
 }
 
-export default function Karte({ config, zuhause, runden, farben, auswahl, position, fokusPosition, abstandUnten }: Props) {
+export default function Karte({ config, zuhause, runden, farben, auswahl, position, fokusPosition, abstandUnten, zurPosition }: Props) {
+  const zurPositionRef = useRef(zurPosition)
+  zurPositionRef.current = zurPosition
   const box = useRef<HTMLDivElement>(null)
   const karte = useRef<maplibregl.Map | null>(null)
   const daten = useRef({ zuhause, runden, farben, auswahl })
@@ -104,6 +131,7 @@ export default function Karte({ config, zuhause, runden, farben, auswahl, positi
       center: zuhause ? [zuhause.lon, zuhause.lat] : [10, 51], zoom: zuhause ? 15 : 5,
     })
     m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left')
+    m.addControl(new PositionsKnopf(() => zurPositionRef.current()), 'top-left')
     m.on('style.load', ebenenSetzen)
     karte.current = m
     const ro = new ResizeObserver(() => m.resize())
@@ -148,7 +176,7 @@ export default function Karte({ config, zuhause, runden, farben, auswahl, positi
   }, [position])
   useEffect(() => {
     const m = karte.current
-    if (!m || !fokusPosition || !position) return
+    if (!m || !fokusPosition || !position || position.lat == null) return
     m.flyTo({ center: [position.lon, position.lat], zoom: 16, duration: 600, padding: { top: 60, bottom: abstandUnten + 20, left: 0, right: 0 } })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fokusPosition])

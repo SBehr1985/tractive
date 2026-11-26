@@ -7,12 +7,13 @@ import Karte from './Karte'
 type Props = {
   hundId: string; config: Config; runden: Runde[]; zuhause: Zuhause | null
   position: Position | null; fokusPosition: number; zuhauseSeit: number | null
+  zurPosition: () => void
 }
 
 const mitternacht = (d: Date) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
 const plusTage = (d: Date, n: number) => { const x = new Date(d); x.setDate(x.getDate() + n); return mitternacht(x) }
 
-export default function Runden({ hundId, config, runden, zuhause, position, fokusPosition, zuhauseSeit }: Props) {
+export default function Runden({ hundId, config, runden, zuhause, position, fokusPosition, zuhauseSeit, zurPosition }: Props) {
   const heute = mitternacht(new Date())
   // Start: Tag der neuesten Runde (meist heute)
   const [tag, setTag] = useState<Date>(() => (runden[0] ? mitternacht(new Date(runden[0].start * 1000)) : heute))
@@ -50,18 +51,29 @@ export default function Runden({ hundId, config, runden, zuhause, position, foku
   const summeM = tagRunden.reduce((a, x) => a + x.strecke_m, 0)
 
   function wechseln(n: number) { setTag(t => plusTage(t, n)); setAuswahl(null) }
+  const datumFeld = useRef<HTMLInputElement>(null)
+  function datumWaehlen() {
+    const f = datumFeld.current
+    if (!f) return
+    try { f.showPicker() } catch { f.focus(); f.click() }   // ältere Browser ohne showPicker
+  }
   const name = k === tagSchluessel(heute) ? 'Heute' : k === tagSchluessel(plusTage(heute, -1)) ? 'Gestern' : ''
 
   return (
     <div className="karten-seite">
       <Karte config={config} zuhause={zuhause} runden={mitStrecke} farben={farben} auswahl={auswahl}
-             position={position} fokusPosition={fokusPosition} abstandUnten={panelHoehe} />
+             position={position} fokusPosition={fokusPosition} abstandUnten={panelHoehe} zurPosition={zurPosition} />
 
       <div className="panel" ref={panel}>
         <div className="tageszeile">
           <button className="rund" onClick={() => wechseln(-1)} title="Tag zurück"><Icon name="links" size={18} /></button>
           <div className="tag-titel">
-            <b>{name ? name + ' · ' : ''}{tagKurz(tag)}</b>
+            <button className="datum-knopf" title="Datum wählen" onClick={datumWaehlen}>
+              <Icon name="kalender" size={14} /><b>{name ? name + ' · ' : ''}{tagKurz(tag)}</b>
+            </button>
+            <input ref={datumFeld} type="date" className="datum-feld" tabIndex={-1} aria-hidden
+                   value={k} max={tagSchluessel(heute)}
+                   onChange={e => { if (e.target.value) { setTag(mitternacht(new Date(e.target.value + 'T00:00:00'))); setAuswahl(null) } }} />
             <span className="badges">
               <Badge icon="pfote" title="Runden">{tagRunden.length}</Badge>
               <Badge icon="uhr" title="Gesamtdauer">{dauerKurz(summeS)}</Badge>
